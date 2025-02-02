@@ -75,6 +75,17 @@ executed directly inside the `policy` module.
 mvn clean generate-sources -DskipPolicyManClientGeneration=false
 ```
 
+
+## Development Setup
+
+A new 'dev' profile has been introduced to configure Hibernate.
+To run the application in development mode, use the following command:
+
+```bash
+mvn spring-boot:run -Dspring.profiles.active=dev
+```
+
+
 ## Static Code Analysis using CheckStyle
 
 This project using `CheckStyle` framework to perform static code analysis. The configuration can be found

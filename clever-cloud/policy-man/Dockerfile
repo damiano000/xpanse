@@ -1,0 +1,1 @@
+FROM ghcr.io/eclipse-xpanse/policy-man:v1.0.6

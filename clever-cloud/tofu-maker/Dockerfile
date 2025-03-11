@@ -1,1 +1,1 @@
-FROM ghcr.io/eclipse-xpanse/tofu-maker:1.0.13
+FROM ghcr.io/eclipse-xpanse/tofu-maker:1.0.14

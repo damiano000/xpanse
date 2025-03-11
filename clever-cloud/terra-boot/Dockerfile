@@ -1,1 +1,1 @@
-FROM ghcr.io/eclipse-xpanse/terra-boot:1.0.21
+FROM ghcr.io/eclipse-xpanse/terra-boot:1.0.22

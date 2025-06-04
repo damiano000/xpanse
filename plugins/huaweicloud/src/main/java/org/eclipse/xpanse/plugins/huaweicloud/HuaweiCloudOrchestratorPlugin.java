@@ -9,6 +9,18 @@ package org.eclipse.xpanse.plugins.huaweicloud;
 import static org.eclipse.xpanse.modules.cache.consts.CacheConstants.REGION_AZS_CACHE_NAME;
 import static org.eclipse.xpanse.modules.cache.consts.CacheConstants.SERVICE_FLAVOR_PRICE_CACHE_NAME;
 
+import com.huaweicloud.sdk.iam.v3.IamClient;
+import com.huaweicloud.sdk.iam.v3.model.CreateLoginTokenRequest;
+import com.huaweicloud.sdk.iam.v3.model.CreateLoginTokenRequestBody;
+import com.huaweicloud.sdk.iam.v3.model.CreateLoginTokenResponse;
+import com.huaweicloud.sdk.iam.v3.model.CreateTemporaryAccessKeyByTokenRequest;
+import com.huaweicloud.sdk.iam.v3.model.CreateTemporaryAccessKeyByTokenRequestBody;
+import com.huaweicloud.sdk.iam.v3.model.CreateTemporaryAccessKeyByTokenResponse;
+import com.huaweicloud.sdk.iam.v3.model.IdentityToken;
+import com.huaweicloud.sdk.iam.v3.model.LoginTokenAuth;
+import com.huaweicloud.sdk.iam.v3.model.LoginTokenSecurityToken;
+import com.huaweicloud.sdk.iam.v3.model.TokenAuth;
+import com.huaweicloud.sdk.iam.v3.model.TokenAuthIdentity;
 import com.huaweicloud.sdk.iam.v3.region.IamRegion;
 import jakarta.annotation.Resource;
 import java.io.File;
@@ -22,6 +34,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.eclipse.xpanse.modules.models.billing.FlavorPriceResult;
 import org.eclipse.xpanse.modules.models.common.enums.Csp;
 import org.eclipse.xpanse.modules.models.credential.AbstractCredentialInfo;
+import org.eclipse.xpanse.modules.models.credential.Credential;
 import org.eclipse.xpanse.modules.models.credential.CredentialVariable;
 import org.eclipse.xpanse.modules.models.credential.CredentialVariables;
 import org.eclipse.xpanse.modules.models.credential.enums.CredentialType;
@@ -61,9 +74,13 @@ public class HuaweiCloudOrchestratorPlugin implements OrchestratorPlugin {
     @Resource private HuaweiCloudVmStateManager vmStateManager;
     @Resource private HuaweiCloudResourceManager resourceManager;
     @Resource private HuaweiCloudPriceCalculator priceCalculator;
+    @Resource private IamClient iamClient;
 
     @Value("${huaweicloud.auto.approve.service.template.enabled:false}")
     private boolean autoApproveServiceTemplateEnabled;
+
+    @Value("${huawei.cloud.csp.mode.enabled:false}")
+    private boolean huaweiCloudCspModeEnabled;
 
     @Override
     public Map<DeployerKind, DeployResourceHandler> resourceHandlers() {
@@ -170,32 +187,47 @@ public class HuaweiCloudOrchestratorPlugin implements OrchestratorPlugin {
 
     @Override
     public List<AbstractCredentialInfo> getCredentialDefinitions() {
-        List<CredentialVariable> credentialVariables = new ArrayList<>();
-        credentialVariables.add(
+        List<AbstractCredentialInfo> credentialInfos = new ArrayList<>();
+
+        // Access Key + Secret Key
+        List<CredentialVariable> accessKeyVars = new ArrayList<>();
+        accessKeyVars.add(
                 new CredentialVariable(
                         HuaweiCloudMonitorConstants.HW_ACCESS_KEY, "The access key.", true));
-        credentialVariables.add(
+        accessKeyVars.add(
                 new CredentialVariable(
                         HuaweiCloudMonitorConstants.HW_SECRET_KEY, "The security key.", true));
-        CredentialVariables accessKey =
+        CredentialVariables accessKeyCreds =
                 new CredentialVariables(
                         getCsp(),
                         getSites().getFirst(),
                         CredentialType.VARIABLES,
                         HuaweiCloudMonitorConstants.IAM,
-                        "Using The access key and security key authentication.",
+                        "Using access key and secret key for authentication.",
                         null,
-                        credentialVariables);
+                        accessKeyVars);
+        credentialInfos.add(accessKeyCreds);
 
-        List<AbstractCredentialInfo> credentialInfos = new ArrayList<>();
-        credentialInfos.add(accessKey);
-        /* In the credential definition object CredentialVariables. The value of fields joined like
-        csp-type-name must be unique. It means when you want to add a new CredentialVariables
-        with type VARIABLES for this csp, the value of filed name in the new CredentialVariables
-        must be different from the value of filed name in others CredentialVariables
-        with the same type VARIABLES. Otherwise, it will throw an exception at the application
-        startup.
-        */
+        // Username + Password (new Credential)
+        if (huaweiCloudCspModeEnabled) {
+            List<CredentialVariable> userPassVars = new ArrayList<>();
+            userPassVars.add(new CredentialVariable("USERNAME", "Huawei Cloud username", true));
+            userPassVars.add(new CredentialVariable("PASSWORD", "Huawei Cloud password", true));
+            userPassVars.add(new CredentialVariable("DOMAIN", "Huawei Cloud domain", false));
+            userPassVars.add(new CredentialVariable("PROJECT", "Huawei Cloud project", false));
+            CredentialVariables userPassCreds =
+                    new CredentialVariables(
+                            getCsp(),
+                            getSites().getFirst(),
+                            CredentialType.USERNAME_PASSWORD,
+                            "huawei.username.password",
+                            "Using username/password authentication.",
+                            null,
+                            userPassVars);
+            userPassCreds.setFinalCredential(false);
+            credentialInfos.add(userPassCreds);
+        }
+
         return credentialInfos;
     }
 
@@ -245,5 +277,110 @@ public class HuaweiCloudOrchestratorPlugin implements OrchestratorPlugin {
     @Cacheable(cacheNames = SERVICE_FLAVOR_PRICE_CACHE_NAME, key = "#request")
     public FlavorPriceResult getServiceFlavorPrice(ServiceFlavorPriceRequest request) {
         return priceCalculator.getServiceFlavorPrice(request);
+    }
+
+    @Override
+    public void getTempDeploymentCredentials(Credential credential) {
+        // Delegates to the typed getTempDeploymentCredentials for AK_SK conversion.
+        getTempDeploymentCredentials("AK_SK", credential);
+    }
+
+    @Override
+    public Credential getTempDeploymentCredentials(
+            String credentialType, Credential storedCredential) {
+        // Only support conversion for USERNAME_PASSWORD
+        if (!"USERNAME_PASSWORD".equals(credentialType)
+                || storedCredential.getType() != CredentialType.USERNAME_PASSWORD) {
+            throw new UnsupportedOperationException("Conversion not supported");
+        }
+
+        // Extract required variables
+        String username = storedCredential.get("USERNAME");
+        String password = storedCredential.get("PASSWORD");
+        String domain = storedCredential.get("DOMAIN");
+        String project = storedCredential.get("PROJECT");
+
+        if (username == null || password == null || domain == null || project == null) {
+            throw new IllegalArgumentException("USERNAME, PASSWORD, DOMAIN, PROJECT are required");
+        }
+
+        // Build Login Token Request
+        LoginTokenSecurityToken loginTokenSecurityToken =
+                new LoginTokenSecurityToken()
+                        .withAccess(username)
+                        .withSecret(password)
+                        .withId(domain);
+
+        LoginTokenAuth loginTokenAuth =
+                new LoginTokenAuth().withSecuritytoken(loginTokenSecurityToken);
+
+        CreateLoginTokenRequestBody loginTokenRequestBody =
+                new CreateLoginTokenRequestBody().withAuth(loginTokenAuth);
+
+        CreateLoginTokenRequest loginTokenRequest =
+                new CreateLoginTokenRequest().withBody(loginTokenRequestBody);
+
+        // Call SDK: Receive Login Token
+        CreateLoginTokenResponse loginTokenResponse = iamClient.createLoginToken(loginTokenRequest);
+
+        String subjectLoginToken = loginTokenResponse.getXSubjectLoginToken();
+        if (subjectLoginToken == null || subjectLoginToken.isBlank()) {
+            throw new RuntimeException("Missing subject login token");
+        }
+
+        // Build Temporary AK/SK Request
+        IdentityToken identityToken = new IdentityToken().withId(subjectLoginToken);
+
+        TokenAuthIdentity tokenAuthIdentity =
+                new TokenAuthIdentity()
+                        .addMethodsItem(TokenAuthIdentity.MethodsEnum.TOKEN)
+                        .withToken(identityToken);
+
+        TokenAuth tokenAuth = new TokenAuth().withIdentity(tokenAuthIdentity);
+
+        CreateTemporaryAccessKeyByTokenRequestBody takBody =
+                new CreateTemporaryAccessKeyByTokenRequestBody().withAuth(tokenAuth);
+
+        CreateTemporaryAccessKeyByTokenRequest takRequest =
+                new CreateTemporaryAccessKeyByTokenRequest().withBody(takBody);
+
+        // Call SDK: Get Temporary AK/SK
+        CreateTemporaryAccessKeyByTokenResponse takResponse =
+                iamClient.createTemporaryAccessKeyByToken(takRequest);
+
+        com.huaweicloud.sdk.iam.v3.model.Credential sdkCred = takResponse.getCredential();
+        if (sdkCred == null) {
+            throw new RuntimeException("No temporary AK/SK received from Huawei");
+        }
+
+        // Map result to Xpanse Credential
+        Credential result = new Credential();
+        result.setType(CredentialType.AK_SK);
+        result.setVariables(
+                Map.of(
+                        "ACCESS_KEY", sdkCred.getAccess(),
+                        "SECRET_KEY", sdkCred.getSecret(),
+                        "SECURITY_TOKEN", sdkCred.getSecuritytoken()));
+
+        return result;
+    }
+
+    public void setIamClient(IamClient iamClient) {
+        this.iamClient = iamClient;
+    }
+
+    /**
+     * Returns AK_SK if available, otherwise converts USERNAME_PASSWORD to AK_SK. Throws if no valid
+     * credentials found.
+     */
+    public Credential selectPreferredCredential(Credential akSk, Credential usernamePassword) {
+        if (akSk != null && akSk.getType() == CredentialType.AK_SK) {
+            return akSk;
+        }
+        if (usernamePassword != null
+                && usernamePassword.getType() == CredentialType.USERNAME_PASSWORD) {
+            return getTempDeploymentCredentials("USERNAME_PASSWORD", usernamePassword);
+        }
+        throw new IllegalArgumentException("No valid AK_SK or USERNAME_PASSWORD credential found.");
     }
 }

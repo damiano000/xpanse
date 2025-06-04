@@ -148,7 +148,8 @@ public class HuaweiCloudClient extends HuaweiCloudCredentials {
         return BssintlClient.newBuilder()
                 .withHttpConfig(getHttpConfig())
                 .withCredential(globalCredential)
-                // The fixed BssintlRegion maps the endpoint 'https://bss-intl.myhuaweicloud.com'.
+                // The fixed BssintlRegion maps the endpoint
+                // 'https://bss-intl.myhuaweicloud.com'.
                 .withRegion(BssintlRegion.AP_SOUTHEAST_1)
                 .build();
     }
@@ -163,7 +164,8 @@ public class HuaweiCloudClient extends HuaweiCloudCredentials {
                     HttpListener.forResponseListener(this::outputResponseInfo);
             httpConfig.addHttpListener(responseListener);
         }
-        if (proxyConfigurationManager.getHttpsProxyDetails() != null) {
+        if (proxyConfigurationManager != null
+                && proxyConfigurationManager.getHttpsProxyDetails() != null) {
             httpConfig.setProxyHost(
                     proxyConfigurationManager.getHttpsProxyDetails().getProxyHost());
             httpConfig.setProxyPort(
@@ -173,6 +175,7 @@ public class HuaweiCloudClient extends HuaweiCloudCredentials {
             httpConfig.setProxyPassword(
                     proxyConfigurationManager.getHttpsProxyDetails().getProxyPassword());
         }
+
         return httpConfig;
     }
 

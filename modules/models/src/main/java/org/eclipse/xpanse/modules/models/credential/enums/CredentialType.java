@@ -15,7 +15,9 @@ public enum CredentialType {
     VARIABLES("variables"),
     HTTP_AUTHENTICATION("http_authentication"),
     API_KEY("api_key"),
-    OAUTH2("oauth2");
+    OAUTH2("oauth2"),
+    USERNAME_PASSWORD("username_password"),
+    AK_SK("ak_sk");
 
     private final String type;
 

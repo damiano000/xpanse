@@ -77,6 +77,11 @@ public abstract class AbstractCredentialInfo implements Cloneable {
     @Schema(description = "The time in seconds to live of the credential")
     Integer timeToLive;
 
+    /** Indicates if the credential is final (true) or temporary (false). */
+    @Setter
+    @Schema(description = "Indicates if the credential is final (true) or temporary (false).")
+    private boolean isFinalCredential = false;
+
     /** The constructor. */
     AbstractCredentialInfo(
             Csp csp,

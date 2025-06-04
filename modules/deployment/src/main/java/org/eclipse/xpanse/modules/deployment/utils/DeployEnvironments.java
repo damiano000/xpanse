@@ -281,6 +281,13 @@ public class DeployEnvironments {
         AbstractCredentialInfo abstractCredentialInfo =
                 this.credentialCenter.getCredential(csp, site, credentialType, userId);
         if (Objects.nonNull(abstractCredentialInfo)) {
+            if (!abstractCredentialInfo.isFinalCredential()) {
+                // If is temporary, retrieve the final credential via the CSP plugin
+                abstractCredentialInfo =
+                        this.pluginManager
+                                .getOrchestratorPlugin(csp)
+                                .getTempDeploymentCredentials(task, abstractCredentialInfo);
+            }
             for (CredentialVariable variable :
                     ((CredentialVariables) abstractCredentialInfo).getVariables()) {
                 variables.put(variable.getName(), variable.getValue());

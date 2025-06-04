@@ -299,6 +299,18 @@ public class CredentialCenter {
             Csp csp, String site, CredentialType credentialType, String userKey) {
         List<AbstractCredentialInfo> credentialInfos =
                 joinCredentialsFromAllSources(csp, site, credentialType, userKey);
+        List<AbstractCredentialInfo> definedCredentialInfos =
+                pluginManager.getOrchestratorPlugin(csp).getCredentialDefinitions();
+
+        for (AbstractCredentialInfo credentialInfo : credentialInfos) {
+            for (AbstractCredentialInfo definedCredential : definedCredentialInfos) {
+                if (credentialInfo.getType() == definedCredential.getType()
+                        && credentialInfo.getName().equals(definedCredential.getName())) {
+                    credentialInfo.setFinalCredential(true);
+                }
+            }
+        }
+
         if (credentialInfos.isEmpty()) {
             throw new CredentialsNotFoundException(
                     String.format(
@@ -321,7 +333,16 @@ public class CredentialCenter {
                                             + " and user %s is not available",
                                     csp, credentialType, userKey)));
         }
-        return credentialWithAllVariables.get();
+        AbstractCredentialInfo credentialInfo = credentialWithAllVariables.get();
+
+        if (!credentialInfo.isFinalCredential()) {
+            credentialInfo =
+                    pluginManager
+                            .getOrchestratorPlugin(csp)
+                            .getTempDeploymentCredentials(null, credentialInfo);
+        }
+
+        return credentialInfo;
     }
 
     private void encodeSensitiveVariables(CreateCredential createCredential) {
@@ -340,8 +361,10 @@ public class CredentialCenter {
     private CredentialVariables decodeSensitiveVariables(
             AbstractCredentialInfo abstractCredentialInfo) {
         CredentialVariables credentialVariables = (CredentialVariables) abstractCredentialInfo;
-        // a clone is necessary otherwise we are mutating the actual object which is in cache.
-        // Spring cache always returns the reference to the original object. So any changes to it
+        // a clone is necessary otherwise we are mutating the actual object which is in
+        // cache.
+        // Spring cache always returns the reference to the original object. So any
+        // changes to it
         // must be avoided.
         CredentialVariables credentialVariablesClone = credentialVariables.clone();
         List<CredentialVariable> variables = credentialVariablesClone.getVariables();
@@ -387,7 +410,8 @@ public class CredentialCenter {
                             "Site %s is not supported by csp %s.",
                             inputCredential.getSite(), inputCredential.getCsp()));
         }
-        // check all fields in the input credential are valid based on the defined credentials.
+        // check all fields in the input credential are valid based on the defined
+        // credentials.
         for (AbstractCredentialInfo credentialAbility : credentialAbilities) {
             if (CredentialType.VARIABLES.equals(credentialAbility.getType())) {
                 Set<String> errorReasons = new HashSet<>();

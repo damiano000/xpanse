@@ -2,18 +2,23 @@ package org.eclipse.xpanse.plugins.huaweicloud;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-import com.huaweicloud.sdk.core.auth.BasicCredentials;
-import com.huaweicloud.sdk.core.auth.ICredential;
-import com.huaweicloud.sdk.iam.v3.IamClient;
+import jakarta.annotation.Resource;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 import org.eclipse.xpanse.modules.models.credential.Credential;
 import org.eclipse.xpanse.modules.models.credential.enums.CredentialType;
 import org.eclipse.xpanse.plugins.huaweicloud.common.HuaweiCloudClient;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.test.context.junit.jupiter.SpringExtension;
 
 @Slf4j
+@ExtendWith(SpringExtension.class)
 class HuaweiCloudIntegrationFullFlowTest {
+
+    @Resource private HuaweiCloudOrchestratorPlugin plugin;
+
+    @Resource private HuaweiCloudClient huaweiCloudClient;
 
     /* ---- NEW TEST FOR property ---- */
     @Test
@@ -37,15 +42,6 @@ class HuaweiCloudIntegrationFullFlowTest {
 
     @Test
     void conversionOfTemporaryCredentialTriggersAKSK() {
-        HuaweiCloudOrchestratorPlugin plugin = new HuaweiCloudOrchestratorPlugin();
-        HuaweiCloudClient huaweiCloudClient = new HuaweiCloudClient();
-        ICredential credential =
-                new BasicCredentials()
-                        .withAk(System.getenv("HUAWEI_CLOUD_MASTER_ACCESS_KEY"))
-                        .withSk(System.getenv("HUAWEI_CLOUD_MASTER_SECRET_KEY"));
-        IamClient iamClient = huaweiCloudClient.getIamClient(credential, "eu-west-101");
-        plugin.setIamClient(iamClient);
-
         Credential tempCredential = new Credential();
         tempCredential.setType(CredentialType.USERNAME_PASSWORD);
         tempCredential.setVariables(
@@ -57,6 +53,7 @@ class HuaweiCloudIntegrationFullFlowTest {
 
         Credential result =
                 plugin.getTempDeploymentCredentials("USERNAME_PASSWORD", tempCredential);
+
         assertEquals(CredentialType.AK_SK, result.getType());
         assertNotNull(result.get("ACCESS_KEY"));
         assertNotNull(result.get("SECRET_KEY"));
@@ -79,16 +76,6 @@ class HuaweiCloudIntegrationFullFlowTest {
 
     @Test
     void usernamePasswordConversionProducesAKSK() {
-        HuaweiCloudOrchestratorPlugin plugin = new HuaweiCloudOrchestratorPlugin();
-        HuaweiCloudClient huaweiCloudClient = new HuaweiCloudClient();
-        log.info("Test 1");
-        ICredential credential =
-                new BasicCredentials()
-                        .withAk(System.getenv("HUAWEI_CLOUD_MASTER_ACCESS_KEY"))
-                        .withSk(System.getenv("HUAWEI_CLOUD_MASTER_SECRET_KEY"));
-        IamClient iamClient = huaweiCloudClient.getIamClient(credential, "eu-west-101");
-        plugin.setIamClient(iamClient);
-        log.info("Test 2");
 
         Credential userPassCredential = new Credential();
         userPassCredential.setType(CredentialType.USERNAME_PASSWORD);
@@ -98,12 +85,10 @@ class HuaweiCloudIntegrationFullFlowTest {
                         "PASSWORD", "default",
                         "DOMAIN", "default",
                         "PROJECT", "default"));
-        log.info("Test 3");
 
         Credential result =
                 plugin.getTempDeploymentCredentials("USERNAME_PASSWORD", userPassCredential);
-        log.info("Test 4"); // with these test logs i check where it crashes and starting the test.
-        // *This test log 4 is not visible*
+
         assertEquals(CredentialType.AK_SK, result.getType());
         assertNotNull(result.get("ACCESS_KEY"));
         assertNotNull(result.get("SECRET_KEY"));
@@ -112,8 +97,6 @@ class HuaweiCloudIntegrationFullFlowTest {
 
     @Test
     void akSkCredentialIsPreferredOverUsernamePassword() {
-        HuaweiCloudOrchestratorPlugin plugin = new HuaweiCloudOrchestratorPlugin();
-
         Credential akSkCredential =
                 new Credential(
                         CredentialType.AK_SK,

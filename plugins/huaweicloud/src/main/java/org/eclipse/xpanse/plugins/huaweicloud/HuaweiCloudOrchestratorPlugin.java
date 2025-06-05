@@ -52,6 +52,7 @@ import org.eclipse.xpanse.modules.orchestrator.monitor.ResourceMetricsRequest;
 import org.eclipse.xpanse.modules.orchestrator.monitor.ServiceMetricsRequest;
 import org.eclipse.xpanse.modules.orchestrator.price.ServiceFlavorPriceRequest;
 import org.eclipse.xpanse.modules.orchestrator.servicestate.ServiceStateManageRequest;
+import org.eclipse.xpanse.plugins.huaweicloud.common.HuaweiCloudClient;
 import org.eclipse.xpanse.plugins.huaweicloud.common.HuaweiCloudConstants;
 import org.eclipse.xpanse.plugins.huaweicloud.manage.HuaweiCloudResourceManager;
 import org.eclipse.xpanse.plugins.huaweicloud.manage.HuaweiCloudVmStateManager;
@@ -74,7 +75,7 @@ public class HuaweiCloudOrchestratorPlugin implements OrchestratorPlugin {
     @Resource private HuaweiCloudVmStateManager vmStateManager;
     @Resource private HuaweiCloudResourceManager resourceManager;
     @Resource private HuaweiCloudPriceCalculator priceCalculator;
-    @Resource private IamClient iamClient;
+    @Resource private HuaweiCloudClient huaweiCloudClient;
 
     @Value("${huaweicloud.auto.approve.service.template.enabled:false}")
     private boolean autoApproveServiceTemplateEnabled;
@@ -304,6 +305,22 @@ public class HuaweiCloudOrchestratorPlugin implements OrchestratorPlugin {
             throw new IllegalArgumentException("USERNAME, PASSWORD, DOMAIN, PROJECT are required");
         }
 
+        // Get AK/SK masters from environment variables
+        String masterAk = System.getenv("HUAWEI_CLOUD_MASTER_ACCESS_KEY");
+        String masterSk = System.getenv("HUAWEI_CLOUD_MASTER_SECRET_KEY");
+        if (masterAk == null || masterSk == null) {
+            throw new IllegalStateException("Master AK/SK environment variables are missing");
+        }
+
+        // Create object credential for AK/SK master
+        com.huaweicloud.sdk.core.auth.ICredential masterCredential =
+                new com.huaweicloud.sdk.core.auth.BasicCredentials()
+                        .withAk(masterAk)
+                        .withSk(masterSk);
+
+        // HuaweiCloudClient injected to get the IamClient for the desired region
+        IamClient iamClient = huaweiCloudClient.getIamClient(masterCredential, project);
+
         // Build Login Token Request
         LoginTokenSecurityToken loginTokenSecurityToken =
                 new LoginTokenSecurityToken()
@@ -363,10 +380,6 @@ public class HuaweiCloudOrchestratorPlugin implements OrchestratorPlugin {
                         "SECURITY_TOKEN", sdkCred.getSecuritytoken()));
 
         return result;
-    }
-
-    public void setIamClient(IamClient iamClient) {
-        this.iamClient = iamClient;
     }
 
     /**

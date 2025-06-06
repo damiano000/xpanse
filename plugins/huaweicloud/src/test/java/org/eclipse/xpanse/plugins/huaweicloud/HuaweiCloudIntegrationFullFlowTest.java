@@ -5,16 +5,44 @@ import static org.junit.jupiter.api.Assertions.*;
 import jakarta.annotation.Resource;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
+import org.eclipse.xpanse.common.proxy.ProxyConfigurationManager;
+import org.eclipse.xpanse.modules.credential.CredentialCenter;
 import org.eclipse.xpanse.modules.models.credential.Credential;
 import org.eclipse.xpanse.modules.models.credential.enums.CredentialType;
 import org.eclipse.xpanse.plugins.huaweicloud.common.HuaweiCloudClient;
+import org.eclipse.xpanse.plugins.huaweicloud.manage.HuaweiCloudResourceManager;
+import org.eclipse.xpanse.plugins.huaweicloud.manage.HuaweiCloudVmStateManager;
+import org.eclipse.xpanse.plugins.huaweicloud.monitor.HuaweiCloudMetricsService;
+import org.eclipse.xpanse.plugins.huaweicloud.price.HuaweiCloudPriceCalculator;
+import org.eclipse.xpanse.plugins.huaweicloud.resourcehandler.HuaweiCloudTerraformResourceHandler;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 
 @Slf4j
 @ExtendWith(SpringExtension.class)
+@ContextConfiguration(
+        classes = {
+            HuaweiCloudOrchestratorPlugin.class,
+            HuaweiCloudClient.class,
+            HuaweiCloudTerraformResourceHandler.class,
+            HuaweiCloudMetricsService.class,
+            HuaweiCloudVmStateManager.class,
+            HuaweiCloudResourceManager.class,
+            ProxyConfigurationManager.class,
+            HuaweiCloudPriceCalculator.class
+        })
 class HuaweiCloudIntegrationFullFlowTest {
+
+    @MockBean private HuaweiCloudTerraformResourceHandler terraformResourceHandler;
+    @MockBean private HuaweiCloudMetricsService metricsService;
+    @MockBean private HuaweiCloudVmStateManager vmStateManager;
+    @MockBean private HuaweiCloudResourceManager resourceManager;
+    @MockBean private HuaweiCloudPriceCalculator priceCalculator;
+    @MockBean private CredentialCenter credentialCenter;
+    @MockBean private ProxyConfigurationManager proxyConfigurationManager;
 
     @Resource private HuaweiCloudOrchestratorPlugin plugin;
 
